@@ -25,8 +25,8 @@ An AI-powered call center application for Angata Sugar Mills that helps farmers 
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/angata-call-center.git
-cd angata-call-center
+git clone https://github.com/sjshamji/callcenter.git
+cd callcenter
 ```
 
 2. Install dependencies:
