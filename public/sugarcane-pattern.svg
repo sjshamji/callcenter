@@ -1,0 +1,25 @@
+<svg width="300" height="300" viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Sugarcane Stalks -->
+  <path d="M50 20C50 20 48 120 50 200C52 280 60 300 60 300" stroke="#2F855A" stroke-width="4" stroke-linecap="round"/>
+  <path d="M58 30C58 30 70 130 68 210C66 290 60 300 60 300" stroke="#2F855A" stroke-width="4" stroke-linecap="round"/>
+  <path d="M150 10C150 10 148 110 150 190C152 270 160 290 160 290" stroke="#2F855A" stroke-width="4" stroke-linecap="round"/>
+  <path d="M158 20C158 20 170 120 168 200C166 280 160 290 160 290" stroke="#2F855A" stroke-width="4" stroke-linecap="round"/>
+  <path d="M240 30C240 30 238 130 240 210C242 290 250 310 250 310" stroke="#2F855A" stroke-width="4" stroke-linecap="round"/>
+  <path d="M248 40C248 40 260 140 258 220C256 300 250 310 250 310" stroke="#2F855A" stroke-width="4" stroke-linecap="round"/>
+  
+  <!-- Leaves -->
+  <path d="M40 70C40 70 10 60 5 90" stroke="#4CAF50" stroke-width="3" stroke-linecap="round"/>
+  <path d="M65 100C65 100 90 90 95 120" stroke="#4CAF50" stroke-width="3" stroke-linecap="round"/>
+  <path d="M40 150C40 150 15 140 10 170" stroke="#4CAF50" stroke-width="3" stroke-linecap="round"/>
+  <path d="M70 200C70 200 95 190 100 220" stroke="#4CAF50" stroke-width="3" stroke-linecap="round"/>
+  
+  <path d="M140 60C140 60 110 50 105 80" stroke="#4CAF50" stroke-width="3" stroke-linecap="round"/>
+  <path d="M165 90C165 90 190 80 195 110" stroke="#4CAF50" stroke-width="3" stroke-linecap="round"/>
+  <path d="M140 140C140 140 115 130 110 160" stroke="#4CAF50" stroke-width="3" stroke-linecap="round"/>
+  <path d="M170 190C170 190 195 180 200 210" stroke="#4CAF50" stroke-width="3" stroke-linecap="round"/>
+  
+  <path d="M230 80C230 80 200 70 195 100" stroke="#4CAF50" stroke-width="3" stroke-linecap="round"/>
+  <path d="M255 110C255 110 280 100 285 130" stroke="#4CAF50" stroke-width="3" stroke-linecap="round"/>
+  <path d="M230 160C230 160 205 150 200 180" stroke="#4CAF50" stroke-width="3" stroke-linecap="round"/>
+  <path d="M260 210C260 210 285 200 290 230" stroke="#4CAF50" stroke-width="3" stroke-linecap="round"/>
+</svg> 
