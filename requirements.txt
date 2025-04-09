@@ -1,0 +1,5 @@
+openai==1.66.3
+python-dotenv==1.0.1
+requests==2.31.0
+supabase==2.3.4
+numpy==1.26.3 

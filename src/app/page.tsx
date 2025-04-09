@@ -1,103 +1,251 @@
-import Image from "next/image";
+"use client"
+
+import { useState, useEffect, useRef } from 'react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { MicIcon, StopCircleIcon } from 'lucide-react'
+import { motion } from 'framer-motion'
+
+interface Analysis {
+  summary: string
+  categories: string[]
+  sentiment: number
+}
 
 export default function Home() {
-  return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm/6 text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-[family-name:var(--font-geist-mono)] font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [isRecording, setIsRecording] = useState(false)
+  const [transcript, setTranscript] = useState('')
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [analysis, setAnalysis] = useState<Analysis | null>(null)
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
-        </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+  // Start recording
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mediaRecorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = mediaRecorder
+      audioChunksRef.current = []
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
+        }
+      }
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+        setAudioBlob(audioBlob)
+        await transcribeAudio(audioBlob)
+      }
+
+      mediaRecorder.start()
+      setIsRecording(true)
+    } catch (error) {
+      console.error('Error accessing microphone:', error)
+    }
+  }
+
+  // Stop recording
+  const stopRecording = () => {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop()
+      setIsRecording(false)
+      
+      // Stop all audio tracks
+      if (mediaRecorderRef.current.stream) {
+        mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop())
+      }
+    }
+  }
+
+  // Transcribe audio using Whisper API
+  const transcribeAudio = async (audioBlob: Blob) => {
+    try {
+      const formData = new FormData()
+      formData.append('audio', audioBlob)
+      
+      const response = await fetch('/api/transcribe', {
+        method: 'POST',
+        body: formData,
+      })
+      
+      if (!response.ok) {
+        throw new Error('Transcription failed')
+      }
+      
+      const data = await response.json()
+      setTranscript(data.transcript)
+      
+      // After transcription, analyze the text
+      await analyzeTranscript(data.transcript)
+    } catch (error) {
+      console.error('Error transcribing audio:', error)
+    }
+  }
+
+  // Analyze transcript using Claude/OpenAI
+  const analyzeTranscript = async (text: string) => {
+    setIsAnalyzing(true)
+    try {
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ transcript: text }),
+      })
+      
+      if (!response.ok) {
+        throw new Error('Analysis failed')
+      }
+      
+      const analysisData = await response.json()
+      setAnalysis(analysisData)
+      
+      // Save the call data to Supabase
+      await saveCall(text, analysisData)
+      
+      // Generate and play AI response
+      await generateSpeechResponse(analysisData)
+    } catch (error) {
+      console.error('Error analyzing transcript:', error)
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+
+  // Save call to Supabase
+  const saveCall = async (transcript: string, analysis: Analysis) => {
+    try {
+      await fetch('/api/save', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          transcript,
+          summary: analysis.summary,
+          categories: analysis.categories,
+          sentiment: analysis.sentiment,
+        }),
+      })
+    } catch (error) {
+      console.error('Error saving call data:', error)
+    }
+  }
+
+  // Generate speech response
+  const generateSpeechResponse = async (analysis: Analysis) => {
+    try {
+      const response = await fetch('/api/speak', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ analysis }),
+      })
+      
+      if (!response.ok) {
+        throw new Error('Speech generation failed')
+      }
+      
+      const audioBlob = await response.blob()
+      const audioUrl = URL.createObjectURL(audioBlob)
+      const audio = new Audio(audioUrl)
+      audio.play()
+    } catch (error) {
+      console.error('Error generating speech:', error)
+    }
+  }
+
+  return (
+    <div className="container py-8">
+      <div className="max-w-2xl mx-auto text-center mb-8">
+        <h1 className="text-4xl font-bold mb-4">Welcome to Angata Sugar Mills Call Center</h1>
+        <p className="text-muted-foreground">
+          Speak directly to our AI assistant about your farming needs
+        </p>
+      </div>
+      
+      <Card className="max-w-xl mx-auto">
+        <CardContent className="pt-6">
+          <div className="flex flex-col items-center">
+            <div className="relative mb-8">
+              {isRecording && (
+                <motion.div
+                  className="absolute -inset-4 rounded-full bg-primary/20"
+                  animate={{ scale: [1, 1.2, 1] }}
+                  transition={{ repeat: Infinity, duration: 1.5 }}
+                />
+              )}
+              <Button
+                size="lg"
+                className={`h-24 w-24 rounded-full ${isRecording ? 'bg-destructive hover:bg-destructive/90' : ''}`}
+                onClick={isRecording ? stopRecording : startRecording}
+              >
+                {isRecording ? (
+                  <StopCircleIcon className="h-12 w-12" />
+                ) : (
+                  <MicIcon className="h-12 w-12" />
+                )}
+              </Button>
+            </div>
+            
+            <div className="text-center">
+              {isRecording ? (
+                <p className="text-primary animate-pulse">Recording... Click to stop</p>
+              ) : (
+                <p className="text-muted-foreground">Click to start speaking</p>
+              )}
+            </div>
+            
+            {transcript && (
+              <div className="mt-8 w-full">
+                <h3 className="font-medium mb-2">Your message:</h3>
+                <div className="p-4 rounded-lg bg-secondary/50 text-sm">
+                  {transcript}
+                </div>
+              </div>
+            )}
+            
+            {isAnalyzing && (
+              <div className="mt-6">
+                <p className="text-muted-foreground animate-pulse">Analyzing your request...</p>
+              </div>
+            )}
+            
+            {analysis && (
+              <div className="mt-8 w-full">
+                <h3 className="font-medium mb-2">AI Response:</h3>
+                <div className="p-4 rounded-lg bg-secondary/50 text-sm">
+                  <p className="mb-4">{analysis.summary}</p>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {analysis.categories.map((category, index) => (
+                      <span key={index} className="px-2 py-1 text-xs rounded-full bg-primary/20 text-primary-foreground">
+                        {category}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="mt-4 flex items-center">
+                    <span className="text-xs text-muted-foreground mr-2">Sentiment:</span>
+                    <span className={`px-2 py-1 text-xs rounded-full ${
+                      analysis.sentiment > 0.2 ? 'bg-green-500/20 text-green-400' :
+                      analysis.sentiment < -0.2 ? 'bg-red-500/20 text-red-400' :
+                      'bg-yellow-500/20 text-yellow-400'
+                    }`}>
+                      {analysis.sentiment > 0.2 ? 'Positive' :
+                       analysis.sentiment < -0.2 ? 'Negative' : 'Neutral'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
     </div>
-  );
+  )
 }
