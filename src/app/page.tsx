@@ -13,6 +13,15 @@ interface Message {
   content: string
   categories?: string[]
   sentiment?: number
+  needs_fertilizer?: boolean
+  needs_seed_cane?: boolean
+  needs_harvesting?: boolean
+  needs_ploughing?: boolean
+  has_crop_issues?: boolean
+  needs_pesticide?: boolean
+  resolved?: boolean
+  follow_up_required?: boolean
+  priority?: number
 }
 
 export default function Home() {
@@ -62,24 +71,47 @@ export default function Home() {
 
   // Audio playback
   const playAudio = (url: string) => {
-    const audio = new Audio(url)
-    audio.onerror = (e) => {
-      console.error('Audio playback error:', e)
+    try {
+      console.log('Playing audio from URL:', url.substring(0, 50) + '...')
+      const audio = new Audio(url)
+      
+      audio.onerror = (e) => {
+        console.error('Audio playback error:', e)
+        toast({
+          title: "Audio Playback Error",
+          description: "Failed to play audio response. Please try clicking the play button.",
+          variant: "destructive"
+        })
+      }
+      
+      audio.oncanplay = () => {
+        console.log('Audio is ready to play')
+      }
+      
+      audio.onended = () => {
+        console.log('Audio playback completed')
+      }
+      
+      // Save reference to audio element
+      audioRef.current = audio
+      
+      // Play the audio
+      audio.play().catch(err => {
+        console.error('Failed to play audio:', err)
+        toast({
+          title: "Audio Playback Error",
+          description: "Failed to play audio. Click the play button to try again.",
+          variant: "destructive"
+        })
+      })
+    } catch (error) {
+      console.error('Error setting up audio playback:', error)
       toast({
         title: "Audio Playback Error",
-        description: "Failed to play audio response.",
+        description: "Failed to set up audio playback.",
         variant: "destructive"
       })
     }
-    
-    audio.play().catch(err => {
-      console.error('Failed to play audio:', err)
-      toast({
-        title: "Audio Playback Error",
-        description: "Failed to play audio. Click the play button to try again.",
-        variant: "destructive"
-      })
-    })
   }
 
   // Toggle recording
@@ -98,6 +130,10 @@ export default function Home() {
   // Start recording
   const startRecording = async () => {
     console.log('startRecording called')
+    
+    // Reset audio chunks before starting
+    audioChunksRef.current = []
+    
     try {
       // First set recording state to true for UI feedback
       setIsRecording(true)
@@ -124,12 +160,11 @@ export default function Home() {
       
       console.log('MediaRecorder created:', mediaRecorder.state)
       mediaRecorderRef.current = mediaRecorder
-      audioChunksRef.current = []
       
       // Set up event handlers
       mediaRecorder.ondataavailable = (event) => {
         console.log('Data available event, size:', event.data.size)
-        if (event.data.size > 0) {
+        if (event.data && event.data.size > 0) {
           audioChunksRef.current.push(event.data)
         }
       }
@@ -150,6 +185,7 @@ export default function Home() {
               description: "No audio was captured. Please try again.",
               variant: "destructive"
             })
+            setIsRecording(false)
           }
         } else {
           console.error('No audio chunks recorded')
@@ -158,7 +194,19 @@ export default function Home() {
             description: "No audio was captured. Please try again.",
             variant: "destructive"
           })
+          setIsRecording(false)
         }
+      }
+      
+      // Error handler for MediaRecorder
+      mediaRecorder.onerror = (event) => {
+        console.error('MediaRecorder error:', event)
+        toast({
+          title: "Recording Error",
+          description: "An error occurred while recording. Please try again.",
+          variant: "destructive"
+        })
+        stopRecording()
       }
       
       // Start recording with timeslice to get data frequently
@@ -197,6 +245,11 @@ export default function Home() {
     try {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         console.log('Stopping active recording...')
+        
+        // Request all remaining data before stopping
+        mediaRecorderRef.current.requestData()
+        
+        // Stop recording
         mediaRecorderRef.current.stop()
         
         // Stop microphone tracks
@@ -207,13 +260,21 @@ export default function Home() {
             track.stop()
           })
         }
+        
+        // Release reference to MediaRecorder
+        mediaRecorderRef.current = null
       } else {
         console.log('No active recording to stop')
       }
     } catch (error) {
       console.error('Error stopping recording:', error)
+      toast({
+        title: "Recording Error",
+        description: "Error stopping recording. Please refresh the page and try again.",
+        variant: "destructive"
+      })
     } finally {
-      // Always reset the recording state at the end
+      // Always reset the recording state
       setIsRecording(false)
     }
   }
@@ -223,12 +284,17 @@ export default function Home() {
     setIsAnalyzing(true)
     
     try {
+      console.log('Processing audio blob, size:', audioBlob.size)
+      
       // Step 1: Transcribe audio
       const transcript = await transcribeAudio(audioBlob)
       if (!transcript) {
+        console.log('No transcript returned, aborting processing')
         setIsAnalyzing(false)
         return
       }
+      
+      console.log('Transcript received:', transcript.substring(0, 50) + (transcript.length > 50 ? '...' : ''))
       
       // Add user message
       setMessages(prev => [...prev, { role: 'user', content: transcript }])
@@ -236,20 +302,32 @@ export default function Home() {
       // Step 2: Analyze the transcript
       const analysis = await analyzeTranscript(transcript)
       if (!analysis) {
+        console.log('No analysis returned, aborting processing')
         setIsAnalyzing(false)
         return
       }
       
-      // We'll save the data when call is ended, not right away
+      console.log('Analysis received')
       
       // Step 3: Generate and play AI voice response
+      console.log('Generating speech response...')
       const aiResponseUrl = await generateSpeechResponse(analysis)
       if (aiResponseUrl) {
+        console.log('Speech response generated, playing audio...')
         setAudioUrl(aiResponseUrl)
         playAudio(aiResponseUrl)
+      } else {
+        console.log('No speech response URL returned')
+        toast({
+          title: "Audio Response",
+          description: "Text response provided as audio could not be generated.",
+          variant: "default"
+        })
       }
       
-      setCallEnded(false) // Reset call ended state when a new message is processed
+      // Set callEnded to false to indicate an ongoing conversation
+      // Only when the user clicks "End Call" will saveCall() be triggered
+      setCallEnded(false)
     } catch (error) {
       console.error('Error processing recording:', error)
       toast({
@@ -315,12 +393,24 @@ export default function Home() {
       
       const analysis = await response.json()
       
-      // Add AI response to messages
+      // Log the complete analysis for debugging
+      console.log('Analysis received from API:', analysis)
+      
+      // Add AI response to messages with ALL properties from analysis
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: analysis.summary,
         categories: analysis.categories,
-        sentiment: analysis.sentiment
+        sentiment: analysis.sentiment,
+        needs_fertilizer: analysis.needs_fertilizer || false,
+        needs_seed_cane: analysis.needs_seed_cane || false,
+        needs_harvesting: analysis.needs_harvesting || false,
+        needs_ploughing: analysis.needs_ploughing || false,
+        has_crop_issues: analysis.has_crop_issues || false,
+        needs_pesticide: analysis.needs_pesticide || false,
+        resolved: analysis.resolved || false,
+        follow_up_required: analysis.follow_up_required || false,
+        priority: analysis.priority || 1
       }])
       
       return analysis
@@ -335,104 +425,67 @@ export default function Home() {
     }
   }
 
-  // Save call to database - now enhanced with better error handling
+  // Save call data to database
   const saveCall = async () => {
-    // Don't save if there are no messages
-    if (messages.length === 0) {
-      toast({
-        title: "No Call Data",
-        description: "There's no conversation to save.",
-        variant: "destructive"
-      })
-      return
-    }
-    
-    setIsSaving(true)
-    
     try {
-      // Find last pair of user and AI messages
-      const userMessages = messages.filter(m => m.role === 'user')
-      const assistantMessages = messages.filter(m => m.role === 'assistant')
+      setIsSaving(true)
       
-      if (userMessages.length === 0 || assistantMessages.length === 0) {
-        throw new Error('Incomplete conversation')
+      // Find all user messages for this call
+      const userTranscripts = messages
+        .filter(msg => msg.role === 'user')
+        .map(msg => msg.content)
+        .join('\n\n');
+      
+      // Find the last assistant message to get the final analysis
+      const lastAssistantMessage = messages.findLast(msg => msg.role === 'assistant')
+      
+      if (!lastAssistantMessage) {
+        console.error('No assistant message found to save')
+        return
       }
       
-      const lastUserMessage = userMessages[userMessages.length - 1]
-      const lastAssistantMessage = assistantMessages[assistantMessages.length - 1]
+      console.log('Saving call with all messages:', messages.length)
       
-      // Get any analyzed needs from the assistant message
-      const {
-        needs_fertilizer = false,
-        needs_seed_cane = false,
-        needs_harvesting = false,
-        needs_ploughing = false,
-        has_crop_issues = false,
-        needs_pesticide = false,
-        resolved = false,
-        follow_up_required = false,
-        priority = 1
-      } = lastAssistantMessage as any;
-      
-      console.log('Saving call data:', {
-        transcript: lastUserMessage.content,
+      // Prepare data in format expected by API, combining all interactions in this call
+      const callData = {
+        transcript: userTranscripts,
         summary: lastAssistantMessage.content,
         categories: lastAssistantMessage.categories || [],
         sentiment: lastAssistantMessage.sentiment || 0,
-        needs_fertilizer,
-        needs_seed_cane,
-        needs_harvesting,
-        needs_ploughing,
-        has_crop_issues,
-        needs_pesticide,
-        resolved,
-        follow_up_required,
-        priority
-      })
+        needs_fertilizer: messages.some(msg => msg.role === 'assistant' && msg.needs_fertilizer) || false,
+        needs_seed_cane: messages.some(msg => msg.role === 'assistant' && msg.needs_seed_cane) || false,
+        needs_harvesting: messages.some(msg => msg.role === 'assistant' && msg.needs_harvesting) || false,
+        needs_ploughing: messages.some(msg => msg.role === 'assistant' && msg.needs_ploughing) || false,
+        has_crop_issues: messages.some(msg => msg.role === 'assistant' && msg.has_crop_issues) || false,
+        needs_pesticide: messages.some(msg => msg.role === 'assistant' && msg.needs_pesticide) || false,
+        resolved: lastAssistantMessage.resolved || false,
+        follow_up_required: lastAssistantMessage.follow_up_required || false,
+        priority: lastAssistantMessage.priority || 1
+      }
+
+      console.log('Saving complete call data:', callData)
       
       const response = await fetch('/api/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          transcript: lastUserMessage.content,
-          summary: lastAssistantMessage.content,
-          categories: lastAssistantMessage.categories || [],
-          sentiment: lastAssistantMessage.sentiment || 0,
-          needs_fertilizer,
-          needs_seed_cane,
-          needs_harvesting,
-          needs_ploughing,
-          has_crop_issues,
-          needs_pesticide,
-          resolved,
-          follow_up_required,
-          priority
-        }),
+        body: JSON.stringify(callData),
       })
       
-      const responseData = await response.json()
-      
       if (!response.ok) {
-        console.error('Save API error:', responseData)
-        throw new Error(responseData.error || 'Failed to save call data')
+        throw new Error('Failed to save call data')
       }
-      
-      console.log('Call saved successfully:', responseData)
       
       toast({
         title: "Call Saved",
-        description: "Your conversation has been saved to the database.",
+        description: "Call data has been saved successfully.",
       })
       
-      // Clear messages after successful save
-      setMessages([])
-      setAudioUrl(null)
       setCallEnded(true)
     } catch (error) {
       console.error('Error saving call data:', error)
       toast({
         title: "Save Error",
-        description: error instanceof Error ? error.message : "Failed to save call data.",
+        description: "Failed to save call data.",
         variant: "destructive"
       })
     } finally {
@@ -440,7 +493,7 @@ export default function Home() {
     }
   }
 
-  // End current call
+  // End current call - this is the ONLY place where saveCall is triggered
   const endCall = async () => {
     if (messages.length === 0) {
       toast({
@@ -451,12 +504,20 @@ export default function Home() {
       return
     }
     
+    // Save the entire conversation as a single call
     await saveCall()
+    
+    // Visual feedback that the call has been saved
+    toast({
+      title: "Call Ended",
+      description: "The call has been saved. You can start a new conversation.",
+    })
   }
 
   // Generate speech response
   const generateSpeechResponse = async (analysis: any): Promise<string | null> => {
     try {
+      console.log('Calling /api/speak endpoint with analysis data')
       const response = await fetch('/api/speak', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -464,24 +525,32 @@ export default function Home() {
       })
       
       if (!response.ok) {
-        throw new Error('Speech generation failed')
+        console.error('Speech generation failed with status:', response.status)
+        throw new Error(`Speech generation failed with status: ${response.status}`)
       }
       
       // Check for JSON fallback response
       const contentType = response.headers.get('content-type') || ''
       if (contentType.includes('application/json')) {
         console.log('Received text fallback instead of audio')
+        const textData = await response.json()
+        toast({
+          title: "Text Response",
+          description: "Using text response as voice generation is unavailable.",
+          variant: "default"
+        })
         return null
       }
       
       // Process audio response
+      console.log('Processing audio blob response')
       const audioBlob = await response.blob()
       return URL.createObjectURL(audioBlob)
     } catch (error) {
       console.error('Error generating speech:', error)
       toast({
         title: "Voice Generation Error",
-        description: "Could not generate voice response.",
+        description: "Could not generate voice response. Using text response instead.",
         variant: "destructive"
       })
       return null

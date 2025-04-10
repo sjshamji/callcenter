@@ -14,6 +14,14 @@ const openai = new OpenAI({
   apiKey: env.OPENAI_API_KEY
 })
 
+// List of fertilizer-related keywords to improve detection
+const FERTILIZER_KEYWORDS = [
+  'fertilizer', 'fertilizers', 'fertilising', 'fertilizing', 'fertilise', 'fertilize',
+  'nutrients', 'nutrient', 'npk', 'nitrogen', 'phosphorus', 'potassium',
+  'manure', 'compost', 'feed', 'feeding', 'nourish', 'soil', 'growth', 'grow', 
+  'organic matter', 'ammonia', 'urea', 'chemicals', 'chemical'
+]
+
 export async function POST(req: NextRequest) {
   console.log('📥 Analyze API - Received request')
   
@@ -33,6 +41,16 @@ export async function POST(req: NextRequest) {
     
     console.log(`📝 Processing transcript: "${body.transcript.substring(0, 100)}${body.transcript.length > 100 ? '...' : ''}"`)
 
+    // Pre-check for fertilizer-related keywords
+    const lowerTranscript = body.transcript.toLowerCase()
+    const containsFertilizerKeywords = FERTILIZER_KEYWORDS.some(keyword => 
+      lowerTranscript.includes(keyword)
+    )
+    
+    if (containsFertilizerKeywords) {
+      console.log('🔎 Detected potential fertilizer-related keywords in transcript')
+    }
+
     // Use OpenAI to analyze the transcript
     console.log('🔄 Calling OpenAI API...')
     const completion = await openai.chat.completions.create({
@@ -46,9 +64,13 @@ export async function POST(req: NextRequest) {
           Your response must address the farmer directly in the first person, as if you are speaking with them. 
           Be empathetic, understanding, and use a conversational tone. Avoid third-person descriptions or analysis.
           
+          Pay EXTRA CLOSE ATTENTION to any mention, even indirect, about soil quality, plant growth issues, or crop health,
+          as these often indicate fertilizer needs. Even vague mentions of "plants not growing well" or "soil issues" should 
+          flag needs_fertilizer as true.
+          
           In addition to your direct response, analyze whether the farmer's message indicates they need any of the following:
           
-          1. Fertilizer input
+          1. Fertilizer input - Mark TRUE for ANY mention of plants not growing properly, yellow leaves, soil quality issues, etc.
           2. Seed cane input
           3. Harvesting service
           4. Ploughing service
@@ -82,6 +104,7 @@ export async function POST(req: NextRequest) {
           write "I understand your concern about the pests affecting your crops. Let me help you find a solution."
           
           Set the boolean values to true only if the farmer explicitly mentions or implies a need for that specific item.
+          ${containsFertilizerKeywords ? 'NOTE: The transcript contains keywords related to fertilizer needs. Be sure to analyze this carefully when setting the needs_fertilizer flag.' : ''}
           `
         },
         {
@@ -125,12 +148,12 @@ export async function POST(req: NextRequest) {
         throw new APIError(`Invalid categories received from OpenAI: ${invalidCategories.join(', ')}`, 500, ErrorCodes.SERVICE_UNAVAILABLE)
       }
       
-      // Set default values for any missing fields
+      // Set default values for any missing fields and ensure fertilizer detection
       const enhancedAnalysis = {
         summary: analysis.summary,
         categories: analysis.categories,
         sentiment: analysis.sentiment,
-        needs_fertilizer: analysis.needs_fertilizer || false,
+        needs_fertilizer: analysis.needs_fertilizer || containsFertilizerKeywords || false,
         needs_seed_cane: analysis.needs_seed_cane || false,
         needs_harvesting: analysis.needs_harvesting || false,
         needs_ploughing: analysis.needs_ploughing || false,
