@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { Claude } from '@anthropic-ai/sdk'
+import Anthropic from '@anthropic-ai/sdk'
 import { env } from '@/lib/env'
 import { handleAPIError, ErrorCodes } from '@/lib/errors'
 
@@ -10,7 +10,7 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // Create Claude client
-const claude = new Claude({
+const claude = new Anthropic({
   apiKey: env.ANTHROPIC_API_KEY
 })
 
@@ -64,13 +64,13 @@ export async function POST(req: NextRequest) {
       enhancedSystemPrompt += `\n\nThe caller has a question about ${category}.`
     }
     
-    console.log('🔄 Calling Claude API...')
+    console.log('🤖 Calling Claude API...')
     console.log(`📨 Message count: ${messages.length}`)
     
     try {
-      // Get completion from Claude
+      // Make Claude API call
       const response = await claude.messages.create({
-        model: 'claude-3-haiku-20240307',
+        model: "claude-3-sonnet-20240229",
         max_tokens: 1000,
         system: enhancedSystemPrompt,
         messages: messages,
@@ -80,7 +80,8 @@ export async function POST(req: NextRequest) {
       console.log('✅ Claude API response received')
       
       // Extract and return the response content
-      const content = response.content[0].text
+      // Access the first content block which should be text type
+      const content = response.content[0].type === 'text' ? response.content[0].text : 'No text response received'
       console.log(`🔤 Response (first 50 chars): "${content.substring(0, 50)}${content.length > 50 ? '...' : ''}"`)
       
       return NextResponse.json({ 
@@ -91,12 +92,15 @@ export async function POST(req: NextRequest) {
         }
       })
       
-    } catch (claudeError) {
+    } catch (claudeError: unknown) {
       // Handle Claude API-specific errors
       console.error('❌ Claude API Error:', claudeError)
       
+      // Use type assertion since we know it's likely an Error object
+      const errorMessage = claudeError instanceof Error ? claudeError.message : 'Unknown error'
+      
       return NextResponse.json({ 
-        error: `Claude API Error: ${claudeError.message || 'Unknown error'}`,
+        error: `Claude API Error: ${errorMessage}`,
         code: 'CLAUDE_API_ERROR'
       }, { status: 500 })
     }

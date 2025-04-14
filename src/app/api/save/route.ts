@@ -85,8 +85,11 @@ export async function POST(req: NextRequest) {
         needs_pesticide = false,
         resolved = false,
         follow_up_required = false,
-        priority = 1
+        priority = 1,
+        farmer_id = null
       } = body;
+      
+      console.log(`${farmer_id ? '👨‍🌾 Farmer ID:' + farmer_id : '⚠️ No Farmer ID provided'}`)
       
       // Insert call record into Supabase
       const { data, error } = await supabase
@@ -106,7 +109,8 @@ export async function POST(req: NextRequest) {
             needs_pesticide,
             resolved,
             follow_up_required,
-            priority
+            priority,
+            "Farmer ID": farmer_id // Link to farmer table
           }
         ])
         .select()

@@ -49,6 +49,17 @@ export function Navigation() {
           >
             Analytics
           </Link>
+          <Link
+            href="/game"
+            className={cn(
+              "transition-colors hover:text-emerald-700 dark:hover:text-emerald-300",
+              pathname === "/game" 
+                ? "text-emerald-800 dark:text-emerald-300 font-medium" 
+                : "text-emerald-600/70 dark:text-emerald-400/70"
+            )}
+          >
+            My Farm
+          </Link>
         </div>
       </div>
     </nav>

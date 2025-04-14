@@ -26,8 +26,13 @@ import {
   Sun, 
   BarChart3, 
   AlertTriangle,
-  Layers
+  Layers,
+  MapPin
 } from 'lucide-react'
+import dynamic from 'next/dynamic'
+
+// Dynamically import the map component with no SSR to avoid window issues
+const FarmMap = dynamic(() => import('@/components/FarmMap'), { ssr: false })
 
 interface Call {
   id: string
@@ -61,6 +66,14 @@ interface SentimentData {
   color: string
 }
 
+interface Farmer {
+  "Farmer ID": string
+  "Farmer Name"?: string
+  "Location"?: string
+  "GPS Coordinates"?: string
+  "Farm Size (Acres)"?: number
+}
+
 const COLORS = {
   positive: '#10b981',
   neutral: '#f59e0b',
@@ -78,6 +91,7 @@ const COLORS = {
 
 export default function Analytics() {
   const [calls, setCalls] = useState<Call[]>([])
+  const [farmers, setFarmers] = useState<Farmer[]>([])
   const [loading, setLoading] = useState(true)
   const [categoryStats, setCategoryStats] = useState<CategoryCount[]>([])
   const [needsStats, setNeedsStats] = useState<NeedCount[]>([])
@@ -130,19 +144,26 @@ export default function Analytics() {
   }
 
   useEffect(() => {
-    const fetchCalls = async () => {
+    const fetchData = async () => {
       try {
-        const response = await fetch('/api/calls')
-        if (!response.ok) throw new Error('Failed to fetch calls')
-        const data = await response.json()
-        setCalls(data)
-        setTotalCalls(data.length)
+        // Fetch calls data
+        const callsResponse = await fetch('/api/calls')
+        if (!callsResponse.ok) throw new Error('Failed to fetch calls')
+        const callsData = await callsResponse.json()
+        setCalls(callsData)
+        setTotalCalls(callsData.length)
+        
+        // Fetch farmers data for map
+        const farmersResponse = await fetch('/api/farmers?list_all=true')
+        if (!farmersResponse.ok) throw new Error('Failed to fetch farmers')
+        const farmersData = await farmersResponse.json()
+        setFarmers(farmersData.farmers || [])
         
         // Calculate issues in recent calls (last 7 days)
         const oneWeekAgo = new Date();
         oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
         
-        const recentIssues = data.filter((call: Call) => {
+        const recentIssues = callsData.filter((call: Call) => {
           const callDate = new Date(call.timestamp || call.created_at || Date.now());
           return (
             callDate >= oneWeekAgo && 
@@ -155,7 +176,7 @@ export default function Analytics() {
         // Calculate category statistics
         const categoryCount = FARMING_CATEGORIES.map(category => ({
           name: category,
-          count: data.filter((call: Call) => 
+          count: callsData.filter((call: Call) => 
             ensureCategoriesArray(call.categories).includes(category)
           ).length
         })).sort((a, b) => b.count - a.count);
@@ -166,37 +187,37 @@ export default function Analytics() {
         const needsCount = [
           { 
             name: 'Fertilizer', 
-            count: data.filter((call: Call) => call.needs_fertilizer).length,
+            count: callsData.filter((call: Call) => call.needs_fertilizer).length,
             color: COLORS.fertilizer,
             icon: 'Droplet'
           },
           { 
             name: 'Seed Cane', 
-            count: data.filter((call: Call) => call.needs_seed_cane).length,
+            count: callsData.filter((call: Call) => call.needs_seed_cane).length,
             color: COLORS.seedCane,
             icon: 'Leaf'
           },
           { 
             name: 'Harvesting', 
-            count: data.filter((call: Call) => call.needs_harvesting).length,
+            count: callsData.filter((call: Call) => call.needs_harvesting).length,
             color: COLORS.harvesting,
             icon: 'Sun'
           },
           { 
             name: 'Ploughing', 
-            count: data.filter((call: Call) => call.needs_ploughing).length,
+            count: callsData.filter((call: Call) => call.needs_ploughing).length,
             color: COLORS.ploughing,
             icon: 'Tractor'
           },
           { 
             name: 'Crop Issues', 
-            count: data.filter((call: Call) => call.has_crop_issues).length,
+            count: callsData.filter((call: Call) => call.has_crop_issues).length,
             color: COLORS.cropIssues,
             icon: 'AlertTriangle'
           },
           { 
             name: 'Pesticide', 
-            count: data.filter((call: Call) => call.needs_pesticide).length,
+            count: callsData.filter((call: Call) => call.needs_pesticide).length,
             color: COLORS.pesticide,
             icon: 'Layers'
           },
@@ -205,9 +226,9 @@ export default function Analytics() {
         setNeedsStats(needsCount);
         
         // Calculate sentiment distribution
-        const positive = data.filter((call: Call) => call.sentiment > 0.2).length;
-        const negative = data.filter((call: Call) => call.sentiment < -0.2).length;
-        const neutral = data.length - positive - negative;
+        const positive = callsData.filter((call: Call) => call.sentiment > 0.2).length;
+        const negative = callsData.filter((call: Call) => call.sentiment < -0.2).length;
+        const neutral = callsData.length - positive - negative;
         
         setSentimentData([
           { name: 'Positive', value: positive, color: COLORS.positive },
@@ -216,16 +237,16 @@ export default function Analytics() {
         ]);
         
         // Calculate average sentiment
-        const totalSentiment = data.reduce((acc: number, call: Call) => acc + call.sentiment, 0);
-        setAverageSentiment(data.length > 0 ? totalSentiment / data.length : 0);
+        const totalSentiment = callsData.reduce((acc: number, call: Call) => acc + call.sentiment, 0);
+        setAverageSentiment(callsData.length > 0 ? totalSentiment / callsData.length : 0);
       } catch (error) {
-        console.error('Error fetching calls:', error);
+        console.error('Error fetching data:', error);
       } finally {
         setLoading(false);
       }
     }
 
-    fetchCalls();
+    fetchData();
   }, []);
 
   // Custom tooltip for charts
@@ -439,6 +460,25 @@ export default function Analytics() {
                       </div>
                     </div>
                   ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          
+          {/* Add Farm Locations Map */}
+          <div className="grid grid-cols-1 gap-6 mt-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-xl font-bold flex items-center gap-2">
+                    <MapPin className="h-5 w-5 text-amber-600" />
+                    Farm Locations Map
+                  </CardTitle>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[500px] w-full rounded-md overflow-hidden">
+                  {!loading && <FarmMap farmers={farmers} />}
                 </div>
               </CardContent>
             </Card>
