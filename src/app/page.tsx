@@ -13,6 +13,35 @@ import CropHealthVisualization from '@/components/CropHealthVisualization'
 // This ensures it won't be affected by component re-renders or state timing issues
 let globalInitialIssue: string | null = null;
 
+// Function to detect if a message is just a greeting
+const isGreeting = (text: string): boolean => {
+  const greetingPatterns = [
+    /^(hello|hi|hey|greetings|good morning|good afternoon|good evening|howdy)/i,
+    /^(how are you|how do you do|how's it going|what's up|how have you been)/i,
+    /^(nice to meet you|pleased to meet you)/i
+  ];
+  
+  // Clean up the input text
+  const cleanText = text.trim().toLowerCase();
+  
+  // Check if text is short (likely a greeting)
+  if (cleanText.length < 20) {
+    // Check against greeting patterns
+    for (const pattern of greetingPatterns) {
+      if (pattern.test(cleanText)) {
+        return true;
+      }
+    }
+    
+    // Check if it's just casual conversation
+    if (/^(how's your day|how are things|what's new)/.test(cleanText)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
 interface Message {
   role: 'user' | 'assistant'
   content: string
@@ -387,10 +416,19 @@ export default function Home() {
       
       // For first message, always store the content for later reference
       if (messages.length === 0) {
+        // Check if it's just a greeting
+        const justGreeting = isGreeting(transcript);
+        
         // Store the initial message content - both in state and global var for backup
         console.log('Storing initial message for later reference:', transcript)
-        setInitialFarmerIssue(transcript)
-        globalInitialIssue = transcript 
+        
+        // Only treat it as an "issue" if it's not just a greeting
+        if (!justGreeting) {
+          setInitialFarmerIssue(transcript)
+          globalInitialIssue = transcript
+        } else {
+          console.log('Detected greeting, not storing as an issue')
+        }
         
         // Check if there's an ID in the initial message
         const idPattern = /\b(KF\d{3})\b/i
@@ -560,8 +598,16 @@ export default function Home() {
             if (initialIssue) {
               console.log('Found initial issue to analyze after ID verification:', initialIssue)
               
-              // Set a personalized greeting that addresses the initial issue
-              const welcomeMsg = `Hello ${farmer["Farmer Name"] || `Farmer ${farmer["Farmer ID"]}`}! Let me help you with your issue about "${initialIssue.substring(0, 50)}${initialIssue.length > 50 ? '...' : ''}"`
+              // Set a personalized greeting
+              let welcomeMsg
+              
+              // If it's a stored issue and not just a greeting, mention it in the greeting
+              if (!isGreeting(initialIssue)) {
+                welcomeMsg = `Hello ${farmer["Farmer Name"] || `Farmer ${farmer["Farmer ID"]}`}! Let me help you with your issue about "${initialIssue.substring(0, 50)}${initialIssue.length > 50 ? '...' : ''}"`
+              } else {
+                // If it was just a greeting, respond appropriately without mentioning an "issue"
+                welcomeMsg = `Hello ${farmer["Farmer Name"] || `Farmer ${farmer["Farmer ID"]}`}! How can I assist you today?`
+              }
               
               setMessages(prev => [...prev, {
                 role: 'assistant',
@@ -576,30 +622,33 @@ export default function Home() {
               }
               
               // Analyze the initial issue now that we have the farmer ID
-              const analysis = await analyzeTranscript(initialIssue, true) // Skip adding greeting message as we already have it
-              if (analysis) {
-                // Add the analysis response
-                setMessages(prev => [...prev, {
-                  role: 'assistant',
-                  content: analysis.summary,
-                  categories: analysis.categories,
-                  sentiment: analysis.sentiment,
-                  needs_fertilizer: analysis.needs_fertilizer || false,
-                  needs_seed_cane: analysis.needs_seed_cane || false,
-                  needs_harvesting: analysis.needs_harvesting || false,
-                  needs_ploughing: analysis.needs_ploughing || false,
-                  has_crop_issues: analysis.has_crop_issues || false,
-                  needs_pesticide: analysis.needs_pesticide || false,
-                  resolved: analysis.resolved || false,
-                  follow_up_required: analysis.follow_up_required || false,
-                  priority: analysis.priority || 1
-                }])
-                
-                // Generate and play the analysis response
-                const aiResponseUrl = await generateSpeechResponse(analysis)
-                if (aiResponseUrl) {
-                  setAudioUrl(aiResponseUrl)
-                  playAudio(aiResponseUrl)
+              // Only analyze as an issue if it's not a greeting
+              if (!isGreeting(initialIssue)) {
+                const analysis = await analyzeTranscript(initialIssue, true) // Skip adding greeting message as we already have it
+                if (analysis) {
+                  // Add the analysis response
+                  setMessages(prev => [...prev, {
+                    role: 'assistant',
+                    content: analysis.summary,
+                    categories: analysis.categories,
+                    sentiment: analysis.sentiment,
+                    needs_fertilizer: analysis.needs_fertilizer || false,
+                    needs_seed_cane: analysis.needs_seed_cane || false,
+                    needs_harvesting: analysis.needs_harvesting || false,
+                    needs_ploughing: analysis.needs_ploughing || false,
+                    has_crop_issues: analysis.has_crop_issues || false,
+                    needs_pesticide: analysis.needs_pesticide || false,
+                    resolved: analysis.resolved || false,
+                    follow_up_required: analysis.follow_up_required || false,
+                    priority: analysis.priority || 1
+                  }])
+                  
+                  // Generate and play the analysis response
+                  const aiResponseUrl = await generateSpeechResponse(analysis)
+                  if (aiResponseUrl) {
+                    setAudioUrl(aiResponseUrl)
+                    playAudio(aiResponseUrl)
+                  }
                 }
               }
               
@@ -662,7 +711,13 @@ export default function Home() {
                   // Process the initial issue with the new farmer profile
                   console.log('Processing initial issue with new farmer profile:', initialIssue)
                   
-                  const welcomeMsg = `Hello ${newFarmer["Farmer Name"] || `Farmer ${newFarmer["Farmer ID"]}`}! I've created your profile. Now, let me help you with your issue about "${initialIssue.substring(0, 50)}${initialIssue.length > 50 ? '...' : ''}"`
+                  // Customize the welcome message based on whether it's a greeting or an issue
+                  let welcomeMsg
+                  if (!isGreeting(initialIssue)) {
+                    welcomeMsg = `Hello ${newFarmer["Farmer Name"] || `Farmer ${newFarmer["Farmer ID"]}`}! I've created your profile. Now, let me help you with your issue about "${initialIssue.substring(0, 50)}${initialIssue.length > 50 ? '...' : ''}"`
+                  } else {
+                    welcomeMsg = `Hello ${newFarmer["Farmer Name"] || `Farmer ${newFarmer["Farmer ID"]}`}! I've created your profile. How can I assist you today?`
+                  }
                   
                   setMessages(prev => [...prev, {
                     role: 'assistant',
@@ -676,8 +731,11 @@ export default function Home() {
                     playAudio(greetingUrl)
                   }
                   
-                  // Analyze the initial issue
-                  await analyzeTranscript(initialIssue)
+                  // Only analyze as an issue if it's not just a greeting
+                  if (!isGreeting(initialIssue)) {
+                    // Analyze the initial issue
+                    await analyzeTranscript(initialIssue)
+                  }
                   
                   // Clear the stored initial issue
                   setInitialFarmerIssue(null)
@@ -747,6 +805,9 @@ export default function Home() {
     if (initialIssue) {
       // Acknowledge that we've heard their issue but need their ID first
       responseText = `I understand you're asking about "${initialIssue.substring(0, 30)}${initialIssue.length > 30 ? '...' : ''}". First, please provide your farmer ID so I can help you better. It should be in the format KF followed by 3 digits, like KF001.`
+    } else {
+      // No initial issue - possibly just a greeting, use the default response
+      responseText = "Please provide your farmer ID. It should be in the format KF followed by 3 digits, like KF001."
     }
     
     console.log("Asking for farmer ID:", responseText)

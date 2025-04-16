@@ -48,194 +48,295 @@ interface FarmerDetailsProps {
   latestCall: any;
 }
 
+// Simplify the MemoizedFarmerDetails component to use direct access to the latest call data
 const MemoizedFarmerDetails = React.memo(function FarmerDetails({ 
   loading, 
   farmer, 
   farmerDetails, 
   latestCall
 }: FarmerDetailsProps) {
+  // All state and refs must be declared first, before any conditionals
   const [showFarmDetails, setShowFarmDetails] = useState(false);
-  
-  // This ensures farmer info doesn't refresh when farm activities change
+  const [displayName, setDisplayName] = useState<string>("Loading farmer...");
   const farmerRef = useRef(farmer);
+  const latestCallRef = useRef(latestCall);
+  
+  // Update the references when props change
+  useEffect(() => {
+    farmerRef.current = farmer;
+    latestCallRef.current = latestCall;
+  }, [farmer, latestCall]);
   
   // Log renders for debugging
   useEffect(() => {
     console.log("FarmerDetails component rendered");
   }, []);
   
+  // Fetch the farmer name based on ID if needed
+  useEffect(() => {
+    const fetchFarmerName = async () => {
+      // Exit early if we're still loading
+      if (loading) return;
+      
+      // First check if we already have the name in the call data
+      if (latestCallRef.current?.["Farmer Name"]) {
+        setDisplayName(latestCallRef.current["Farmer Name"]);
+        return;
+      } 
+      
+      if (latestCallRef.current?.farmer_name) {
+        setDisplayName(latestCallRef.current.farmer_name);
+        return;
+      }
+      
+      if (latestCallRef.current?.name) {
+        setDisplayName(latestCallRef.current.name);
+        return;
+      }
+      
+      // If we have a farmer ID but no name, fetch from the API
+      const farmerId = latestCallRef.current?.farmer_id || latestCallRef.current?.["Farmer ID"] || 
+                      farmerRef.current?.farmerId;
+      
+      if (farmerId) {
+        try {
+          console.log(`🔍 Fetching name for farmer ID: ${farmerId}`);
+          const response = await fetch(`/api/farmers?id=${farmerId}`);
+          
+          if (response.ok) {
+            const data = await response.json();
+            if (data.farmer && data.farmer["Farmer Name"]) {
+              console.log(`✅ Found name in API: ${data.farmer["Farmer Name"]}`);
+              setDisplayName(data.farmer["Farmer Name"]);
+            } else {
+              console.log(`⚠️ No farmer name found in API for ${farmerId}`);
+              setDisplayName(`Farmer ${farmerId}`);
+            }
+          } else {
+            console.error(`Error fetching farmer: ${response.statusText}`);
+            setDisplayName(`Farmer ${farmerId}`);
+          }
+        } catch (error) {
+          console.error("Error fetching farmer name:", error);
+          setDisplayName(`Farmer ${farmerId}`);
+        }
+      } else if (farmerRef.current?.farmerName) {
+        setDisplayName(farmerRef.current.farmerName);
+      } else {
+        setDisplayName("Unknown Farmer");
+      }
+    };
+    
+    fetchFarmerName();
+  }, [latestCallRef.current, farmerRef.current, loading]);
+  
+  // Determine the content based on loading state - using conditional rendering instead of conditional returns
+  let content;
   if (loading) {
-    return (
+    content = (
       <div className="flex items-center justify-center p-4">
         <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-amber-800 border-opacity-50"></div>
+        <span className="ml-2 text-amber-800">Loading farm data...</span>
       </div>
     );
-  }
-  
-  return (
-    <div className="text-center w-full max-w-4xl">
-      <div className="bg-gradient-to-r from-amber-200 to-emerald-200 p-6 rounded-lg shadow-md mb-4">
-        <button 
-          onClick={() => setShowFarmDetails(prev => !prev)} 
-          className="w-full flex justify-between items-center text-left"
-        >
-          <h2 className="text-2xl font-bold text-emerald-800 border-b-2 border-emerald-400 pb-2 mb-4 w-full">{farmerRef.current.farmerName}'s Farm</h2>
-          <span className="text-emerald-800 text-xl">{showFarmDetails ? '▲' : '▼'}</span>
-        </button>
-        
-        {showFarmDetails && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Farmer details card */}
-            <div className="bg-white/70 rounded-lg p-4 shadow-sm">
-              <h3 className="text-lg font-semibold text-amber-800 mb-2 flex items-center">
-                <span className="mr-2">👨‍🌾</span> 
-                Farmer Details
-              </h3>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div className="font-medium text-amber-700">Farm ID:</div>
-                <div className="font-mono bg-amber-50 px-2 py-1 rounded">{farmerRef.current.farmerId}</div>
-                
-                <div className="font-medium text-amber-700">Farm Size:</div>
-                <div className="font-mono bg-amber-50 px-2 py-1 rounded">{farmerRef.current.farmSize} acres</div>
-                
-                {farmerDetails && (
-                  <>
-                    <div className="font-medium text-amber-700">Location:</div>
-                    <div className="font-mono bg-amber-50 px-2 py-1 rounded">{farmerDetails.Location || 'Unknown'}</div>
-                    
-                    {farmerDetails.Gender && (
-                      <>
-                        <div className="font-medium text-amber-700">Gender:</div>
-                        <div className="font-mono bg-amber-50 px-2 py-1 rounded">{farmerDetails.Gender}</div>
-                      </>
-                    )}
-                    
-                    {farmerDetails.Age && (
-                      <>
-                        <div className="font-medium text-amber-700">Age:</div>
-                        <div className="font-mono bg-amber-50 px-2 py-1 rounded">{farmerDetails.Age}</div>
-                      </>
-                    )}
-                    
-                    {farmerDetails["Preferred Language"] && (
-                      <>
-                        <div className="font-medium text-amber-700">Language:</div>
-                        <div className="font-mono bg-amber-50 px-2 py-1 rounded">{farmerDetails["Preferred Language"]}</div>
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
-              
-              {/* Crop Health Gauge */}
-              <div className="mt-4 pt-3 border-t border-amber-200">
-                <div className="flex justify-between items-center">
-                  <p className="font-semibold text-amber-800">Crop Health:</p>
-                  <CropHealthGauge 
-                    issues={[
-                      ...(farmerRef.current.needsFertilizer ? ['fertilizer'] : []),
-                      ...(farmerRef.current.needsSeedCane ? ['seed_cane'] : []),
-                      ...(farmerRef.current.needsHarvesting ? ['harvesting'] : []),
-                      ...(farmerRef.current.needsPloughing ? ['ploughing'] : []),
-                      ...(farmerRef.current.hasCropIssues ? ['crop_issues'] : []),
-                      ...(farmerRef.current.needsPesticide ? ['pesticide'] : [])
-                    ]} 
-                  />
-                </div>
-              </div>
-            </div>
-            
-            {/* Latest call summary */}
-            {latestCall ? (
+  } else if (!farmerRef.current.farmerId && !latestCallRef.current) {
+    content = (
+      <div className="text-center w-full max-w-4xl p-4 bg-amber-50 rounded-lg shadow">
+        <h2 className="text-lg text-amber-800">Waiting for farm data...</h2>
+        <p className="text-sm text-amber-600">No farmer information is available yet.</p>
+      </div>
+    );
+  } else {
+    content = (
+      <div className="text-center w-full max-w-4xl">
+        <div className="bg-gradient-to-r from-amber-200 to-emerald-200 p-6 rounded-lg shadow-md mb-4">
+          <button 
+            onClick={() => setShowFarmDetails(prev => !prev)} 
+            className="w-full flex justify-between items-center text-left"
+          >
+            <h2 className="text-2xl font-bold text-emerald-800 border-b-2 border-emerald-400 pb-2 mb-4 w-full">{displayName}'s Farm</h2>
+            <span className="text-emerald-800 text-xl">{showFarmDetails ? '▲' : '▼'}</span>
+          </button>
+          
+          {showFarmDetails && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Farmer details card */}
               <div className="bg-white/70 rounded-lg p-4 shadow-sm">
-                <h3 className="text-lg font-semibold text-emerald-800 mb-2 flex items-center">
-                  <span className="mr-2">📞</span>
-                  Latest Call Report
+                <h3 className="text-lg font-semibold text-amber-800 mb-2 flex items-center">
+                  <span className="mr-2">👨‍🌾</span> 
+                  Farmer Details
                 </h3>
-                <div className="flex items-center text-xs text-emerald-700 italic mb-2 bg-emerald-50 px-2 py-1 rounded">
-                  <span className="mr-1">📅</span>
-                  {new Date(latestCall.timestamp || latestCall.created_at).toLocaleDateString()} at 
-                  {' ' + new Date(latestCall.timestamp || latestCall.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                </div>
-                <div className="bg-emerald-50 p-3 rounded mb-3 text-sm">
-                  <p>{latestCall.summary}</p>
-                </div>
-                
-                {/* Farm needs based on call analysis */}
-                <div className="mt-3">
-                  <h4 className="font-semibold text-sm text-emerald-800 border-b border-emerald-200 pb-1 mb-2">Farm Needs:</h4>
-                  <div className="grid grid-cols-2 gap-1">
-                    {latestCall.needs_fertilizer && 
-                      <div className="flex items-center text-amber-800 text-xs bg-amber-50 px-2 py-1 rounded">
-                        <span className="mr-1">💧</span> Needs fertilizer
-                      </div>
-                    }
-                    {latestCall.needs_seed_cane && 
-                      <div className="flex items-center text-amber-800 text-xs bg-amber-50 px-2 py-1 rounded">
-                        <span className="mr-1">🌱</span> Needs seed cane
-                      </div>
-                    }
-                    {latestCall.needs_harvesting && 
-                      <div className="flex items-center text-amber-800 text-xs bg-amber-50 px-2 py-1 rounded">
-                        <span className="mr-1">🌾</span> Ready for harvesting
-                      </div>
-                    }
-                    {latestCall.needs_ploughing && 
-                      <div className="flex items-center text-amber-800 text-xs bg-amber-50 px-2 py-1 rounded">
-                        <span className="mr-1">🚜</span> Field needs ploughing
-                      </div>
-                    }
-                    {latestCall.has_crop_issues && 
-                      <div className="flex items-center text-amber-800 text-xs bg-amber-50 px-2 py-1 rounded">
-                        <span className="mr-1">🔍</span> Has crop health issues
-                      </div>
-                    }
-                    {latestCall.needs_pesticide && 
-                      <div className="flex items-center text-amber-800 text-xs bg-amber-50 px-2 py-1 rounded">
-                        <span className="mr-1">🌿</span> Needs pesticide application
-                      </div>
-                    }
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="font-medium text-amber-700">Farm ID:</div>
+                  <div className="font-mono bg-amber-50 px-2 py-1 rounded">
+                    {latestCallRef.current?.farmer_id || latestCallRef.current?.["Farmer ID"] || farmerRef.current.farmerId}
                   </div>
                   
-                  {!latestCall.needs_fertilizer && !latestCall.needs_seed_cane && 
-                   !latestCall.needs_harvesting && !latestCall.needs_ploughing && 
-                   !latestCall.has_crop_issues && !latestCall.needs_pesticide && 
-                   <div className="flex items-center justify-center text-green-700 text-sm font-semibold mt-2 bg-green-50 p-2 rounded">
-                     <span className="mr-2">✅</span> Farm is in good condition!
-                   </div>
-                  }
+                  <div className="font-medium text-amber-700">Farm Size:</div>
+                  <div className="font-mono bg-amber-50 px-2 py-1 rounded">
+                    {latestCallRef.current?.["Farm Size"] || latestCallRef.current?.farm_size || 
+                    farmerRef.current.farmSize} acres
+                  </div>
                   
-                  {/* Crop Health Gauge based on latest call */}
-                  <div className="mt-3 pt-2 border-t border-emerald-200 flex justify-between items-center">
-                    <h4 className="font-semibold text-sm">Crop Health Status:</h4>
+                  {/* Location from call if available */}
+                  <div className="font-medium text-amber-700">Location:</div>
+                  <div className="font-mono bg-amber-50 px-2 py-1 rounded">
+                    {latestCallRef.current?.Location || latestCallRef.current?.location || 
+                     farmerDetails?.Location || 'Unknown'}
+                  </div>
+                  
+                  {/* Gender from call if available */}
+                  {(latestCallRef.current?.Gender || latestCallRef.current?.gender || farmerDetails?.Gender) && (
+                    <>
+                      <div className="font-medium text-amber-700">Gender:</div>
+                      <div className="font-mono bg-amber-50 px-2 py-1 rounded">
+                        {latestCallRef.current?.Gender || latestCallRef.current?.gender || 
+                         farmerDetails?.Gender}
+                      </div>
+                    </>
+                  )}
+                  
+                  {/* Age from call if available */}
+                  {(latestCallRef.current?.Age || latestCallRef.current?.age || farmerDetails?.Age) && (
+                    <>
+                      <div className="font-medium text-amber-700">Age:</div>
+                      <div className="font-mono bg-amber-50 px-2 py-1 rounded">
+                        {latestCallRef.current?.Age || latestCallRef.current?.age || 
+                         farmerDetails?.Age}
+                      </div>
+                    </>
+                  )}
+                  
+                  {/* Language from call if available */}
+                  {(latestCallRef.current?.["Preferred Language"] || 
+                    latestCallRef.current?.preferred_language || 
+                    latestCallRef.current?.language || 
+                    farmerDetails?.["Preferred Language"]) && (
+                    <>
+                      <div className="font-medium text-amber-700">Language:</div>
+                      <div className="font-mono bg-amber-50 px-2 py-1 rounded">
+                        {latestCallRef.current?.["Preferred Language"] || 
+                         latestCallRef.current?.preferred_language || 
+                         latestCallRef.current?.language || 
+                         farmerDetails?.["Preferred Language"]}
+                      </div>
+                    </>
+                  )}
+                </div>
+                
+                {/* Crop Health Gauge */}
+                <div className="mt-4 pt-3 border-t border-amber-200">
+                  <div className="flex justify-between items-center">
+                    <p className="font-semibold text-amber-800">Crop Health:</p>
                     <CropHealthGauge 
                       issues={[
-                        ...(latestCall.needs_fertilizer ? ['fertilizer'] : []),
-                        ...(latestCall.needs_seed_cane ? ['seed_cane'] : []),
-                        ...(latestCall.needs_harvesting ? ['harvesting'] : []),
-                        ...(latestCall.needs_ploughing ? ['ploughing'] : []),
-                        ...(latestCall.has_crop_issues ? ['crop_issues'] : []),
-                        ...(latestCall.needs_pesticide ? ['pesticide'] : [])
+                        ...(farmerRef.current.needsFertilizer ? ['fertilizer'] : []),
+                        ...(farmerRef.current.needsSeedCane ? ['seed_cane'] : []),
+                        ...(farmerRef.current.needsHarvesting ? ['harvesting'] : []),
+                        ...(farmerRef.current.needsPloughing ? ['ploughing'] : []),
+                        ...(farmerRef.current.hasCropIssues ? ['crop_issues'] : []),
+                        ...(farmerRef.current.needsPesticide ? ['pesticide'] : [])
                       ]} 
                     />
                   </div>
                 </div>
               </div>
-            ) : (
-              <div className="bg-white/70 rounded-lg p-4 shadow-sm flex flex-col items-center justify-center text-gray-500">
-                <div className="text-4xl mb-2">📞</div>
-                <p className="text-center">No recent calls found for this farmer.</p>
-                <p className="text-xs text-center mt-2">Call data will appear here after the first call.</p>
-              </div>
-            )}
-          </div>
-        )}
+              
+              {/* Latest call summary */}
+              {latestCall ? (
+                <div className="bg-white/70 rounded-lg p-4 shadow-sm">
+                  <h3 className="text-lg font-semibold text-emerald-800 mb-2 flex items-center">
+                    <span className="mr-2">📞</span>
+                    Latest Call Report
+                  </h3>
+                  <div className="flex items-center text-xs text-emerald-700 italic mb-2 bg-emerald-50 px-2 py-1 rounded">
+                    <span className="mr-1">📅</span>
+                    {new Date(latestCall.timestamp || latestCall.created_at).toLocaleDateString()} at 
+                    {' ' + new Date(latestCall.timestamp || latestCall.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                  </div>
+                  <div className="bg-emerald-50 p-3 rounded mb-3 text-sm">
+                    <p>{latestCall.summary}</p>
+                  </div>
+                  
+                  {/* Farm needs based on call analysis */}
+                  <div className="mt-3">
+                    <h4 className="font-semibold text-sm text-emerald-800 border-b border-emerald-200 pb-1 mb-2">Farm Needs:</h4>
+                    <div className="grid grid-cols-2 gap-1">
+                      {latestCall.needs_fertilizer && 
+                        <div className="flex items-center text-amber-800 text-xs bg-amber-50 px-2 py-1 rounded">
+                          <span className="mr-1">💧</span> Needs fertilizer
+                        </div>
+                      }
+                      {latestCall.needs_seed_cane && 
+                        <div className="flex items-center text-amber-800 text-xs bg-amber-50 px-2 py-1 rounded">
+                          <span className="mr-1">🌱</span> Needs seed cane
+                        </div>
+                      }
+                      {latestCall.needs_harvesting && 
+                        <div className="flex items-center text-amber-800 text-xs bg-amber-50 px-2 py-1 rounded">
+                          <span className="mr-1">🌾</span> Ready for harvesting
+                        </div>
+                      }
+                      {latestCall.needs_ploughing && 
+                        <div className="flex items-center text-amber-800 text-xs bg-amber-50 px-2 py-1 rounded">
+                          <span className="mr-1">🚜</span> Field needs ploughing
+                        </div>
+                      }
+                      {latestCall.has_crop_issues && 
+                        <div className="flex items-center text-amber-800 text-xs bg-amber-50 px-2 py-1 rounded">
+                          <span className="mr-1">🔍</span> Has crop health issues
+                        </div>
+                      }
+                      {latestCall.needs_pesticide && 
+                        <div className="flex items-center text-amber-800 text-xs bg-amber-50 px-2 py-1 rounded">
+                          <span className="mr-1">🌿</span> Needs pesticide application
+                        </div>
+                      }
+                    </div>
+                    
+                    {!latestCall.needs_fertilizer && !latestCall.needs_seed_cane && 
+                      !latestCall.needs_harvesting && !latestCall.needs_ploughing &&
+                      !latestCall.has_crop_issues && !latestCall.needs_pesticide && (
+                      <div className="flex items-center justify-center bg-emerald-50 text-emerald-800 text-xs p-2 rounded mt-1">
+                        <span className="mr-1">✅</span> 
+                        Farm is in good condition! No immediate needs detected in this call.
+                      </div>
+                    )}
+                    
+                    {/* Crop Health Gauge based on latest call */}
+                    <div className="mt-3 pt-2 border-t border-emerald-200 flex justify-between items-center">
+                      <h4 className="font-semibold text-sm">Crop Health Status:</h4>
+                      <CropHealthGauge 
+                        issues={[
+                          ...(latestCall.needs_fertilizer ? ['fertilizer'] : []),
+                          ...(latestCall.needs_seed_cane ? ['seed_cane'] : []),
+                          ...(latestCall.needs_harvesting ? ['harvesting'] : []),
+                          ...(latestCall.needs_ploughing ? ['ploughing'] : []),
+                          ...(latestCall.has_crop_issues ? ['crop_issues'] : []),
+                          ...(latestCall.needs_pesticide ? ['pesticide'] : [])
+                        ]} 
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white/70 rounded-lg p-4 shadow-sm flex flex-col items-center justify-center text-gray-500">
+                  <div className="text-4xl mb-2">📞</div>
+                  <p className="text-center">No recent calls found for this farmer.</p>
+                  <p className="text-xs text-center mt-2">Call data will appear here after the first call.</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
+  
+  // Always return content, no conditional returns
+  return content;
 }, (prevProps, nextProps) => {
-  // Custom comparison function that prevents re-renders when only boolean farm states change
-  // This is crucial to prevent the info box from refreshing when activities are clicked
+  // Custom comparison function remains the same
   return (
     prevProps.loading === nextProps.loading &&
     prevProps.farmer.farmerId === nextProps.farmer.farmerId &&
@@ -251,15 +352,15 @@ export default function MyFarmGame() {
   // Game state
   const [loading, setLoading] = useState(false)
   const [farmer, setFarmer] = useState<FarmData>({
-    farmerId: 'KF001',
-    farmerName: 'John Mwangi',
-    farmSize: 2.5,
-    needsFertilizer: true,
-    needsSeedCane: true,
-    needsHarvesting: true,
-    needsPloughing: true,
-    hasCropIssues: true,
-    needsPesticide: true
+    farmerId: '',
+    farmerName: '',
+    farmSize: 1.0,
+    needsFertilizer: false,
+    needsSeedCane: false,
+    needsHarvesting: false,
+    needsPloughing: false,
+    hasCropIssues: false,
+    needsPesticide: false
   })
   
   // Farmer details from call history
@@ -345,91 +446,167 @@ export default function MyFarmGame() {
     const fetchFarmerData = async () => {
       setLoading(true)
       try {
-        // First try to get the latest farmer ID from the latest call or localStorage
-        let currentFarmerId;
-        
-        // Try to fetch all calls to find most recent call with farmer ID
+        // First try to get all calls to find the most recent one with a farmer ID
+        console.log('📊 Fetching all calls to find most recent with farmer ID...')
         const allCallsResponse = await fetch('/api/calls')
-        if (allCallsResponse.ok) {
-          const allCallsData = await allCallsResponse.json()
+        
+        if (!allCallsResponse.ok) {
+          throw new Error(`Failed to fetch calls: ${allCallsResponse.statusText}`)
+        }
+        
+        const allCallsData = await allCallsResponse.json()
+        
+        // Sort calls by date (most recent first)
+        const sortedCalls = [...allCallsData].sort((a, b) => {
+          const dateA = new Date(a.timestamp || a.created_at || 0)
+          const dateB = new Date(b.timestamp || b.created_at || 0)
+          return dateB.getTime() - dateA.getTime()
+        })
+        
+        console.log(`📞 Found ${sortedCalls.length} total calls`)
+        
+        // Always use the most recent call, regardless of whether it has a farmer ID
+        const recentCall = sortedCalls[0]
+        let currentFarmerId
+        let currentCall = null
+        
+        if (recentCall) {
+          // Use the farmer_id from the call if available, otherwise use the Farmer ID
+          currentFarmerId = recentCall.farmer_id || recentCall["Farmer ID"] || "Unknown"
+          currentCall = recentCall
+          console.log('📞 Using most recent call:', new Date(recentCall.timestamp || recentCall.created_at).toLocaleString())
+          console.log('👨‍🌾 Farmer ID in call:', currentFarmerId)
           
-          // Sort calls by date (most recent first)
-          const sortedCalls = [...allCallsData].sort((a, b) => {
-            const dateA = new Date(a.timestamp || a.created_at || 0)
-            const dateB = new Date(b.timestamp || b.created_at || 0)
-            return dateB.getTime() - dateA.getTime()
-          })
-          
-          // Find the most recent call with a farmer ID
-          const recentCallWithFarmer = sortedCalls.find(call => call["Farmer ID"])
-          
-          if (recentCallWithFarmer) {
-            currentFarmerId = recentCallWithFarmer["Farmer ID"]
-            setLatestCall(recentCallWithFarmer)
-            console.log('📞 Found recent call with farmer:', currentFarmerId)
+          // Create initial farmerDetails directly from call data - keep it simple
+          const initialFarmerDetails = {
+            "Farmer ID": recentCall.farmer_id || recentCall["Farmer ID"] || "Unknown",
+            "Farmer Name": recentCall["Farmer Name"] || "Unknown Farmer",
+            "Location": recentCall.Location || recentCall.location || "Unknown Location",
+            "Farm Size (Acres)": recentCall["Farm Size"] || recentCall.farm_size || recentCall["Farm Size (Acres)"] || 1.0,
+            "Gender": recentCall.Gender || recentCall.gender,
+            "Age": recentCall.Age || recentCall.age,
+            "Preferred Language": recentCall["Preferred Language"] || recentCall.preferred_language || recentCall.language
           }
-        }
-        
-        // If no recent call found, fall back to localStorage
-        if (!currentFarmerId) {
-          currentFarmerId = localStorage.getItem('currentFarmerId')
-          console.log('⚠️ No recent call found, using localStorage:', currentFarmerId)
-        }
-        
-        if (!currentFarmerId) {
-          console.log('❌ No farmer ID found in calls or localStorage')
-          setLoading(false)
-          return
-        }
-        
-        // Store for next time
-        localStorage.setItem('currentFarmerId', currentFarmerId)
-        
-        // Fetch farmer details
-        const response = await fetch(`/api/farmers?id=${currentFarmerId}`)
-        if (!response.ok) {
-          console.error('Failed to fetch farmer data')
-          setLoading(false)
-          return
-        }
-        
-        const data = await response.json()
-        if (data.farmer) {
-          setFarmerDetails(data.farmer)
           
-          // If we already have the latest call, use it
-          let recentCall = latestCall
+          // Only log the relevant data
+          console.log('📋 Call data contains:', {
+            farmerID: recentCall.farmer_id || recentCall["Farmer ID"],
+            farmerName: recentCall["Farmer Name"],
+            available_keys: Object.keys(recentCall)
+          });
           
-          // If not, fetch call history for this farmer
-          if (!recentCall) {
-            const callResponse = await fetch(`/api/history?farmer_id=${currentFarmerId}&limit=1`)
-            if (callResponse.ok) {
-              const callData = await callResponse.json()
-              recentCall = callData.calls?.[0] || {}
-              setLatestCall(recentCall)
+          // Set these details immediately so UI shows something even if API call fails
+          setFarmerDetails(initialFarmerDetails)
+          console.log('📱 Created initial farmer details from call data:', initialFarmerDetails["Farmer Name"])
+          
+          // Also set the latest call data immediately
+          setLatestCall(recentCall)
+          console.log('📝 Setting latest call data:', new Date(recentCall.timestamp || recentCall.created_at).toLocaleString())
+        } else {
+          // If no calls found, fall back to localStorage
+          currentFarmerId = localStorage.getItem('currentFarmerId') || 'KF001' // Default to KF001 if nothing found
+          console.log('⚠️ No calls found, using stored farmer ID:', currentFarmerId)
+        }
+        
+        // If we have a farmer ID, store it for future use
+        if (currentFarmerId) {
+          localStorage.setItem('currentFarmerId', currentFarmerId)
+        }
+        
+        // Only try to fetch farmer details from API if we have a meaningful farmer ID 
+        // and it comes from a reliable source (not generated as fallback)
+        if (currentFarmerId && currentFarmerId !== "Unknown") {
+          console.log('👨‍🌾 Fetching farmer details for ID:', currentFarmerId)
+          const farmerResponse = await fetch(`/api/farmers?id=${currentFarmerId}`)
+          
+          // Declare a type for the farmer data
+          interface FarmerDetailsType {
+            "Farmer ID": string;
+            "Farmer Name"?: string;
+            "Location"?: string;
+            "Farm Size (Acres)"?: number;
+            [key: string]: any; // To accommodate any other fields
+          }
+          
+          let farmerData: { farmer: FarmerDetailsType | null } = { farmer: null }
+          
+          if (farmerResponse.ok) {
+            farmerData = await farmerResponse.json()
+            console.log('API response data:', farmerData);
+          } else {
+            console.warn(`Could not fetch farmer details: ${farmerResponse.statusText}`)
+          }
+          
+          // If we have farmer data from the API, use it to augment (not replace) our call data
+          if (farmerData.farmer) {
+            // Check if the API farmer is the same as our call farmer
+            const isMatchingFarmer = 
+              farmerData.farmer["Farmer ID"] === farmerDetails?.["Farmer ID"] ||
+              farmerData.farmer["Farmer Name"] === farmerDetails?.["Farmer Name"];
+              
+            if (isMatchingFarmer) {
+              // Merge - keep all original call data but add any extra details from API
+              const mergedFarmerDetails = {
+                ...farmerDetails, // Keep all existing call data
+                // Enhance with API data for fields that might be missing
+                "Location": farmerDetails?.Location || farmerData.farmer["Location"],
+                "Gender": farmerDetails?.Gender || farmerData.farmer["Gender"],
+                "Age": farmerDetails?.Age || farmerData.farmer["Age"],
+                "Preferred Language": farmerDetails?.["Preferred Language"] || farmerData.farmer["Preferred Language"]
+              }
+              
+              setFarmerDetails(mergedFarmerDetails)
+              console.log('✅ Enhanced farmer details from database, keeping consistency with call data');
+            } else {
+              console.log('⚠️ API returned a different farmer than our call data, keeping call data for consistency');
             }
           }
-          
-          // Set farmer game data based on most recent call
-          setFarmer({
-            farmerId: data.farmer["Farmer ID"],
-            farmerName: data.farmer["Farmer Name"] || "Unknown Farmer",
-            farmSize: parseFloat(data.farmer["Farm Size (Acres)"]) || 1.0,
-            needsFertilizer: recentCall?.needs_fertilizer || false,
-            needsSeedCane: recentCall?.needs_seed_cane || false,
-            needsHarvesting: recentCall?.needs_harvesting || false, 
-            needsPloughing: recentCall?.needs_ploughing || false,
-            hasCropIssues: recentCall?.has_crop_issues || false,
-            needsPesticide: recentCall?.needs_pesticide || false
-          })
+        } else {
+          console.log('ℹ️ Skipping API fetch for farmer details, using call data only');
         }
+        
+        // Set the latest call data
+        if (currentCall) {
+          setLatestCall(currentCall)
+          console.log('📝 Setting latest call data:', new Date(currentCall.timestamp || currentCall.created_at).toLocaleString())
+        }
+        
+        // Set farmer game data based on most recent call
+        const needsBasedOnCall = {
+          needsFertilizer: currentCall?.needs_fertilizer || false,
+          needsSeedCane: currentCall?.needs_seed_cane || false,
+          needsHarvesting: currentCall?.needs_harvesting || false, 
+          needsPloughing: currentCall?.needs_ploughing || false,
+          hasCropIssues: currentCall?.has_crop_issues || false,
+          needsPesticide: currentCall?.needs_pesticide || false
+        }
+        
+        console.log('🌱 Setting farmer needs based on call:', needsBasedOnCall)
+        
+        // Update the farmer state with all the gathered data
+        setFarmer(prevFarmer => {
+          // Create a new farmer object using values directly from the latest call or farmer details
+          const updatedFarmer = {
+            farmerId: farmerDetails?.["Farmer ID"] || currentCall?.farmer_id || currentCall?.["Farmer ID"] || "Unknown",
+            farmerName: currentCall?.["Farmer Name"] || farmerDetails?.["Farmer Name"] || "Unknown Farmer",
+            farmSize: parseFloat(String(farmerDetails?.["Farm Size (Acres)"] || 
+                       currentCall?.["Farm Size"] || currentCall?.farm_size || 1.0)),
+            ...needsBasedOnCall
+          };
+          
+          console.log('👨‍🌾 Setting farmer state with:', updatedFarmer.farmerName);
+          return updatedFarmer;
+        });
+        
       } catch (error) {
         console.error('Error fetching farmer data:', error)
+        // If there's an error, still exit loading state
       } finally {
         setLoading(false)
       }
     }
     
+    // Fetch data when component mounts
     fetchFarmerData()
     
     // P key handler for performing actions
@@ -766,6 +943,42 @@ export default function MyFarmGame() {
   }
   
   const farmProgress = getFarmProgress();
+  
+  // Add a useEffect hook to initialize farm progress based on call data
+  useEffect(() => {
+    if (!latestCall || loading) return;
+    
+    // Initialize the farm progress based on the needs data from the latest call
+    // This will show the farm in the appropriate state when the game starts
+    console.log('🌱 Initializing farm progress based on call data');
+    
+    // If the farm needs harvesting, the plants are mature
+    if (latestCall.needs_harvesting) {
+      console.log('🌾 Farm has mature plants ready for harvesting');
+      // No need to set anything as this is the final state before harvesting
+    }
+    // If the farm needs pesticide or has crop issues, plants are growing
+    else if (latestCall.needs_pesticide || latestCall.has_crop_issues) {
+      console.log('🌿 Farm has growing plants that need care');
+      // No need to set anything as this represents growing plants
+    }
+    // If the farm needs fertilizer, seeds have been planted
+    else if (latestCall.needs_fertilizer) {
+      console.log('🌱 Farm has planted seeds that need fertilizer');
+      // No need to set anything as this represents planted seeds
+    }
+    // If the farm needs seed cane, the field is ploughed
+    else if (latestCall.needs_seed_cane) {
+      console.log('🚜 Farm is ploughed and ready for planting');
+      // No need to set anything as this represents ploughed field
+    }
+    // If the farm needs ploughing, it's in the initial state
+    else if (latestCall.needs_ploughing) {
+      console.log('🔄 Farm needs to be ploughed');
+      // This is the initial state
+    }
+    
+  }, [latestCall, loading]);
   
   return (
     <div className="min-h-screen bg-gradient-to-b from-amber-50 to-emerald-50 p-4">

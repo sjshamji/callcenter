@@ -14,8 +14,10 @@ import {
   Tractor, 
   Layers,
   BellRing,
-  Flag
+  Flag,
+  ArchiveX
 } from 'lucide-react'
+import ResolveIssueModal from '@/components/ResolveIssueModal'
 
 interface Call {
   id: string
@@ -67,48 +69,56 @@ export default function History() {
     highPriority: 0
   })
   const [showResolved, setShowResolved] = useState<boolean | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [selectedCall, setSelectedCall] = useState<Call | null>(null)
+
+  const refreshData = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch('/api/calls')
+      if (!response.ok) throw new Error('Failed to fetch calls')
+      const data = await response.json()
+      
+      // Sort by date (most recent first)
+      const sortedData = [...data].sort((a, b) => {
+        const dateA = new Date(a.timestamp || a.created_at || 0);
+        const dateB = new Date(b.timestamp || b.created_at || 0);
+        return dateB.getTime() - dateA.getTime();
+      });
+      
+      setCalls(sortedData)
+      
+      // Calculate summary statistics
+      const summaryStats: SummaryStats = {
+        total: data.length,
+        resolved: data.filter((c: Call) => c.resolved).length,
+        unresolved: data.filter((c: Call) => !c.resolved).length,
+        followUp: data.filter((c: Call) => c.follow_up_required).length,
+        needsFertilizer: data.filter((c: Call) => c.needs_fertilizer).length,
+        needsSeedCane: data.filter((c: Call) => c.needs_seed_cane).length,
+        needsHarvesting: data.filter((c: Call) => c.needs_harvesting).length,
+        needsPloughing: data.filter((c: Call) => c.needs_ploughing).length,
+        hasCropIssues: data.filter((c: Call) => c.has_crop_issues).length,
+        needsPesticide: data.filter((c: Call) => c.needs_pesticide).length,
+        highPriority: data.filter((c: Call) => c.priority && c.priority >= 3).length
+      }
+      
+      setStats(summaryStats)
+    } catch (error) {
+      console.error('Error fetching calls:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const fetchCalls = async () => {
-      try {
-        const response = await fetch('/api/calls')
-        if (!response.ok) throw new Error('Failed to fetch calls')
-        const data = await response.json()
-        
-        // Sort by date (most recent first)
-        const sortedData = [...data].sort((a, b) => {
-          const dateA = new Date(a.timestamp || a.created_at || 0);
-          const dateB = new Date(b.timestamp || b.created_at || 0);
-          return dateB.getTime() - dateA.getTime();
-        });
-        
-        setCalls(sortedData)
-        
-        // Calculate summary statistics
-        const summaryStats: SummaryStats = {
-          total: data.length,
-          resolved: data.filter((c: Call) => c.resolved).length,
-          unresolved: data.filter((c: Call) => !c.resolved).length,
-          followUp: data.filter((c: Call) => c.follow_up_required).length,
-          needsFertilizer: data.filter((c: Call) => c.needs_fertilizer).length,
-          needsSeedCane: data.filter((c: Call) => c.needs_seed_cane).length,
-          needsHarvesting: data.filter((c: Call) => c.needs_harvesting).length,
-          needsPloughing: data.filter((c: Call) => c.needs_ploughing).length,
-          hasCropIssues: data.filter((c: Call) => c.has_crop_issues).length,
-          needsPesticide: data.filter((c: Call) => c.needs_pesticide).length,
-          highPriority: data.filter((c: Call) => c.priority && c.priority >= 3).length
-        }
-        
-        setStats(summaryStats)
-      } catch (error) {
-        console.error('Error fetching calls:', error)
-      } finally {
-        setLoading(false)
-      }
-    }
-
-    fetchCalls()
+    refreshData()
   }, [])
+
+  const handleResolveClick = (call: Call) => {
+    setSelectedCall(call)
+    setIsModalOpen(true)
+  }
 
   // Helper function to ensure categories is always an array
   const ensureCategoriesArray = (categories: string[] | string | null): string[] => {
@@ -321,6 +331,16 @@ export default function History() {
                         )}
                       </div>
                       <div className="flex items-center">
+                        {/* Add Close Issue button for unresolved calls with needs */}
+                        {!call.resolved && hasNeeds && (
+                          <button
+                            onClick={() => handleResolveClick(call)}
+                            className="mr-3 px-2 py-1 text-xs rounded bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100 flex items-center hover:bg-green-200 dark:hover:bg-green-800 transition-colors"
+                          >
+                            <ArchiveX className="h-3 w-3 mr-1" />
+                            Close Issue
+                          </button>
+                        )}
                         <span className="text-xs text-muted-foreground mr-2">Sentiment:</span>
                         <span className={`px-2 py-1 text-xs rounded-full ${
                           call.sentiment > 0.2 ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100' :
@@ -416,6 +436,19 @@ export default function History() {
             })}
           </div>
         </div>
+      )}
+      
+      {/* Resolution Modal */}
+      {selectedCall && (
+        <ResolveIssueModal
+          call={selectedCall}
+          isOpen={isModalOpen}
+          onClose={() => {
+            setIsModalOpen(false)
+            setSelectedCall(null)
+          }}
+          onResolve={refreshData}
+        />
       )}
     </div>
   )
