@@ -66,10 +66,29 @@ export async function POST(req: NextRequest) {
     try {
       // Create a buffer from the file
       const buffer = Buffer.from(await audio.arrayBuffer())
+      console.log(`📊 Created buffer with size: ${buffer.length} bytes`)
+      
+      // Log file details before sending to OpenAI
+      console.log(`📦 Preparing to send file to Whisper API:
+        - File type: ${audio.type}
+        - File size: ${audio.size} bytes
+        - Buffer length: ${buffer.length} bytes
+        - OpenAI key prefix: ${env.OPENAI_API_KEY ? env.OPENAI_API_KEY.substring(0, 10) + '...' : 'Missing'}`
+      )
+      
+      // Create the proper file for the OpenAI API
+      let fileType = audio.type;
+      if (!fileType || fileType === 'audio/webm;codecs=opus') {
+        fileType = 'audio/webm';
+      }
+      
+      // Create a file with the appropriate mime type for OpenAI
+      const file = new File([buffer], 'audio.webm', { type: fileType });
+      console.log(`🎵 Created file for OpenAI with type: ${file.type}`);
       
       // Transcribe audio using Whisper API
       const transcription = await openai.audio.transcriptions.create({
-        file: new File([buffer], 'audio.webm', { type: audio.type }),
+        file: file,
         model: 'whisper-1',
         language: 'en',
       })
@@ -94,11 +113,21 @@ export async function POST(req: NextRequest) {
       console.error('❌ OpenAI API Error:', openaiError)
       
       if (openaiError instanceof OpenAI.APIError) {
+        console.error(`❌ OpenAI API Error Details:
+          - Status: ${openaiError.status}
+          - Message: ${openaiError.message}
+          - Type: ${openaiError.type || 'Unknown'}
+          - Code: ${openaiError.code || 'No code provided'}
+        `)
+        
         return NextResponse.json({ 
           error: `OpenAI API Error: ${openaiError.message}`,
-          code: 'OPENAI_API_ERROR'
+          status: openaiError.status,
+          type: openaiError.type,
+          code: openaiError.code || 'OPENAI_API_ERROR'
         }, { status: openaiError.status || 500 })
       } else {
+        console.error('❌ Non-OpenAI error during API call:', openaiError)
         throw openaiError // Pass to general error handler
       }
     }

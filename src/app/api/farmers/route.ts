@@ -13,7 +13,7 @@ if (process.env.NODE_ENV === 'development') {
 // Initialize Supabase client
 const supabase = createClient(
   env.SUPABASE_URL,
-  env.SUPABASE_ANON_KEY
+  env.SUPABASE_SERVICE_KEY || env.SUPABASE_ANON_KEY
 )
 
 /**

@@ -1001,7 +1001,14 @@ export default function Home() {
       })
       
       if (!response.ok) {
-        throw new Error('Transcription failed')
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Transcription failed:', errorData);
+        toast({
+          title: "Transcription Failed",
+          description: errorData.error || `Error (${response.status}): Could not transcribe audio`,
+          variant: "destructive"
+        });
+        return null;
       }
       
       const data = await response.json()
@@ -1087,7 +1094,14 @@ export default function Home() {
       })
       
       if (!response.ok) {
-        throw new Error('Analysis failed')
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('Analysis failed:', errorData);
+        toast({
+          title: "Analysis Failed",
+          description: errorData.error || `Error (${response.status}): Could not analyze message`,
+          variant: "destructive"
+        });
+        return null;
       }
       
       const analysis = await response.json()
